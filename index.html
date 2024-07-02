@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        h1, h2 {
+            color: #2c3e50;
+        }
+
+        section {
+            background-color: #ffffff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input[type="date"],
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #2980b9;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #3498db;
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #attendanceList p {
+            background-color: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        #uploadMessage, #attendanceMessage {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+
+    </style>
+</head>
+<body>
+    <h1>Face Recognition System</h1>
+
+    <!-- Section for Attendance Details -->
+    <section>
+        <h2>Attendance Details</h2>
+        <label for="date">Select Date:</label>
+        <input type="date" id="date" name="date">
+        <button id="sendButton">Get Attendance</button>
+        <h2 id="attendanceMessage"></h2>  <!-- This will display the attendance message -->
+        <div id="attendanceList"></div>
+    </section>
+    
+    <!-- Section for Image Upload -->
+    <section>
+        <h2>Upload Image For Registration</h2>
+        <label for="usernameInput">Enter your name:</label>
+        <input type="text" id="usernameInput" placeholder="Your Name">
+        <h3>Webcam</h3>
+        <video id="webcam" autoplay></video>
+        <button id="captureButton">Capture Image</button>
+        <button id="uploadButton">Upload Images</button>
+        <h2 id="uploadMessage"></h2>  <!-- This will display the upload message -->
+    </section>
+    
+
+
+    <script>
+        let capturedImages = [];
+
+        // Access the webcam
+        const video = document.getElementById('webcam');
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error('Error accessing webcam: ', err);
+            });
+
+        // Capture image from webcam
+        document.getElementById('captureButton').addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            capturedImages.push(imageDataUrl);
+            document.getElementById('uploadMessage').textContent = 'Image captured!';
+        });
+
+        // Upload captured images
+        document.getElementById('uploadButton').addEventListener('click', () => {
+            const username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                document.getElementById('uploadMessage').textContent = 'Please enter your name.';
+                return;
+            }
+
+            if (capturedImages.length === 0) {
+                document.getElementById('uploadMessage').textContent = 'No images to upload.';
+                return;
+            }
+
+            const apiUrl = 'http://localhost:5000/upload';
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, imageDataUrls: capturedImages })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('uploadMessage').textContent = `Images uploaded successfully: ${data.filenames.join(', ')}`;
+                capturedImages = [];  // Clear the captured images array after upload
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('uploadMessage').textContent = `Error uploading images: ${error.message}`;
+            });
+        });
+
+        // Fetch attendance details
+        document.getElementById('sendButton').addEventListener('click', () => {
+            const date = document.getElementById('date').value;
+            const apiUrl = 'http://localhost:5000/get_attendance';
+
+            fetch(`${apiUrl}?date=${date}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const attendanceMessageElement = document.getElementById('attendanceMessage');
+                    const attendanceListElement = document.getElementById('attendanceList');
+                    attendanceMessageElement.innerHTML = '';  // Clear previous messages
+                    attendanceListElement.innerHTML = '';  // Clear previous results
+
+                    if (data.message) {
+                        attendanceMessageElement.textContent = data.message;
+                    } else {
+                        attendanceMessageElement.textContent = 'Attendance List:';
+                        data.forEach(record => {
+                            const p = document.createElement('p');
+                            p.textContent = `Name: ${record.name}, Time: ${record.time}`;
+                            attendanceListElement.appendChild(p);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('attendanceMessage').textContent = `Error: ${error.message}`;
+                });
+        });
+    </script>
+</body>
+</html>
